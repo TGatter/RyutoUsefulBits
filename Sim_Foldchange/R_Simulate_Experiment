@@ -1,0 +1,35 @@
+
+library(tximport)
+library(polyester)
+library(Biostrings)
+
+
+setwd("[BASE_FOLDER_REPLACE]/quants")
+files_list = list.files()
+files <- file.path("[BASE_FOLDER_REPLACE]", "quants", files_list, "quant.sf")
+
+txi.tx <- tximport(files, type = "salmon", txOut = TRUE)
+
+fastapath = "[GENOME_FASTA_REPLACE]"
+fasta = readDNAStringSet(fastapath)
+
+fold_changes <- read.table("[BASE_FOLDER_REPLACE]/sim_base/fold_changes_r",header=FALSE,sep=" ")
+fc <- fold_changes[,2]
+fc <- matrix(c(c(rep(1.0, length(fc))), fc), nrow=length(fc), ncol=2)
+
+mean_disp <- as.matrix(read.csv( "[BASE_FOLDER_REPLACE]/sim_base/mean_disp_r" ,sep=" ",row.names="Transcript"))
+disps <- mean_disp[,'Disp']
+means <- mean_disp[,'Mean']
+
+names(fasta) <- vapply(strsplit(names(fasta), ' '), "[", "", 1)
+sub_fasta <- fasta[ names(fasta) %in% row.names(mean_disp), ]
+
+
+setwd("[BASE_FOLDER_REPLACE]")
+
+writeXStringSet(sub_fasta, 'sub_fasta.fa')
+
+Ns = 5
+
+se <- simulate_experiment('sub_fasta.fa',  outdir='sim', num_reps=c(Ns,Ns), reads_per_transcript=means, size=1/disps, error_model='illumina4', fold_changes=fc, strand_specific=TRUE, gzip = TRUE, shuffle = TRUE, seed=42)
+

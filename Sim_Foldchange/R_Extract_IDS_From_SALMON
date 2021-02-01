@@ -1,0 +1,40 @@
+
+library(tximport)
+library(polyester)
+library(Biostrings)
+library(GenomicFeatures)
+library(DESeq2)
+
+setwd("[BASE_FOLDER_REPLACE]/quants")
+
+files_list = list.files()[]
+files <- file.path("[BASE_FOLDER_REPLACE]", "quants", files_list, "quant.sf")
+
+setwd("[BASE_FOLDER_REPLACE]//simulation_fold_change")
+
+
+TxDb <- makeTxDbFromGFF(file = "[REFERENCE_GTF_REPLACE]")
+k <- keys(TxDb, keytype = "TXNAME")
+tx2gene <- select(TxDb, k, "GENEID", "TXNAME")
+
+txi.tx <- tximport(files, type = "salmon", tx2gene=tx2gene, txOut = TRUE)
+
+names(files) <- c("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10")
+
+condition = factor(c("B", "B", "B", "B", "B", "B", "B", "B", "B", "B"))
+ExpDesign <- data.frame(row.names=colnames(txi.tx$counts), condition = condition)
+
+dds <- DESeqDataSetFromTximport(txi.tx, ExpDesign, ~1)
+
+dds <- estimateSizeFactors(dds)
+dds <- estimateDispersions(dds)
+
+meanDispPairs <- subset(mcols(dds),TRUE, c(baseMean, dispGeneEst))
+# dispGeneEst > 1e-4 & baseMean > 5
+
+for(p in  row.names(meanDispPairs) ){ 
+   print(p)
+   cat(c(p, unlist(tx2gene[ tx2gene[,1] == p, ])[2], meanDispPairs[p,]$baseMean, meanDispPairs[p,]$dispGeneEst, txi.tx$length[p,][1]) , file="ids.txt", sep=" ", append=TRUE)
+   cat("\n", file="ids.txt", append=TRUE)
+}
+

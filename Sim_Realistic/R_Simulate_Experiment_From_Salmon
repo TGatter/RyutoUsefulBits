@@ -1,0 +1,83 @@
+
+library(tximport)
+library(polyester)
+library(Biostrings)
+
+
+
+create_read_numbers_co = function(mu, fit, p0, n=NULL, mod=NULL, beta=NULL, 
+    seed=NULL){
+
+    m = length(mu) 
+
+    if(!is.null(seed)){set.seed(seed)}
+    if(is.null(mod) | is.null(beta)){
+        cat("Generating data from baseline model.\n")
+        if(is.null(m) | is.null(n)){
+            stop(.makepretty("create_read_numbers error: if you don't specify
+            mod and beta, you must specify m and n.\n"))
+        }
+        index = c(1:length(mu))
+
+        mus = mu[index]
+        p0s = p0[index]
+        mumat = log(mus + 0.001) %*% t(rep(1,n))    
+    } else {
+        m = dim(beta)[1]
+        n = dim(mod)[1]
+        index = c(1:length(mu))
+        mus = mu[index]
+        p0s = p0[index]
+  
+        ind = !apply(mod,2,function(x){all(x==1)})
+        mod = cbind(mod[,ind])
+        beta = cbind(beta[,ind])
+        mumat = log(mus + 0.001) + beta %*% t(mod)
+    }
+  
+    muvec = as.vector(mumat)
+    sizevec = predict(fit,muvec)$y
+    sizemat = matrix(sizevec,nrow=m)
+    counts = sizemat*NA
+    for(i in 1:m){
+      counts[i,] = rbinom(n,prob=(1-p0s[i]),size=1)*
+        rnbinom(n,mu=exp(mumat[i,]),size=exp(sizemat[i,]))
+    }
+    return(counts)
+}
+
+
+
+setwd("[BASE_FOLDER_REPLACE]/quants")
+files_list = list.files()
+files <- file.path("[BASE_FOLDER_REPLACE]", "quants", files_list, "quant.sf")
+
+txi.tx <- tximport(files, type = "salmon", txOut = TRUE)
+
+params = get_params(txi.tx$counts)
+
+fastapath = "[GENOME_FASTA_REPLACE]"
+fasta = readDNAStringSet(fastapath)
+
+names(fasta) <- vapply(strsplit(names(fasta), ' '), "[", "", 1)
+sub_fasta <- fasta[ names(fasta) %in% names(params$p0), ]
+
+setwd("[BASE_FOLDER_REPLACE]/simulation_real")
+
+writeXStringSet(sub_fasta, 'sub_fasta.fa')
+
+Nsamples = 10
+
+custom_readmat = create_read_numbers_co(mu=params$mu, fit=params$fit, p0=params$p0, n=Nsamples, seed=42)
+
+simulate_experiment_countmat('sub_fasta.fa', readmat=custom_readmat, outdir='base_new', error_model='illumina4', strand_specific=TRUE, gzip = TRUE, shuffle = TRUE)
+
+rownames(custom_readmat) <- names(params$p0)
+
+custom_readmat_row <- custom_readmat[rowSums(custom_readmat) > 0, ]
+
+for(p in  rownames(custom_readmat_row) ){ 
+   print(p)
+   cat( p , file="ids.txt", append=TRUE)
+   cat("\n", file="ids.txt", append=TRUE)
+}
